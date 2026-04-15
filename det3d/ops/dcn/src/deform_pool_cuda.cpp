@@ -11,6 +11,14 @@
 #include <cmath>
 #include <vector>
 
+#ifndef AT_CHECK
+#define AT_CHECK TORCH_CHECK
+#endif
+
+#ifndef AT_ERROR
+#define AT_ERROR(...) TORCH_CHECK(false, __VA_ARGS__)
+#endif
+
 void DeformablePSROIPoolForward(
     const at::Tensor data, const at::Tensor bbox, const at::Tensor trans,
     at::Tensor out, at::Tensor top_count, const int batch, const int channels,
