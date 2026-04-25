@@ -1,7 +1,15 @@
-import importlib
-spconv_spec = importlib.util.find_spec("spconv")
-found = spconv_spec is not None
-if found:
+def _has_spconv():
+    for module_name in ("spconv.pytorch", "spconv"):
+        try:
+            module = __import__(module_name, fromlist=["SparseConv3d"])
+            getattr(module, "SparseConv3d")
+            return True
+        except Exception:
+            continue
+    return False
+
+
+if _has_spconv():
     from .backbones import *  # noqa: F401,F403
 else:
     print("No spconv, sparse convolution disabled!")

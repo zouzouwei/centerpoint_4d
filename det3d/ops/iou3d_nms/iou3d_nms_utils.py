@@ -5,9 +5,19 @@ All Rights Reserved 2019-2020.
 """
 import torch
 
-from . import iou3d_nms_cuda
+try:
+    from . import iou3d_nms_cuda
+except ImportError:
+    iou3d_nms_cuda = None
 import numpy as np 
 
+
+def _require_iou3d_cuda():
+    if iou3d_nms_cuda is None:
+        raise RuntimeError(
+            "iou3d_nms_cuda is not built. Build det3d/ops/iou3d_nms or use a config "
+            "that does not require rotated CUDA NMS, such as circular_nms configs."
+        )
 
 
 def boxes_iou_bev(boxes_a, boxes_b):
@@ -20,6 +30,7 @@ def boxes_iou_bev(boxes_a, boxes_b):
         ans_iou: (N, M)
     """
     assert boxes_a.shape[1] == boxes_b.shape[1] == 7
+    _require_iou3d_cuda()
     ans_iou = torch.cuda.FloatTensor(torch.Size((boxes_a.shape[0], boxes_b.shape[0]))).zero_()
 
     iou3d_nms_cuda.boxes_iou_bev_gpu(boxes_a.contiguous(), boxes_b.contiguous(), ans_iou)
@@ -42,6 +53,7 @@ def boxes_iou3d_gpu(boxes_a, boxes_b):
         ans_iou: (N, M)
     """
     assert boxes_a.shape[1] == boxes_b.shape[1] == 7
+    _require_iou3d_cuda()
 
     # transform back to pcdet's coordinate
     boxes_a = to_pcdet(boxes_a)
@@ -80,6 +92,7 @@ def nms_gpu(boxes, scores, thresh, pre_maxsize=None, **kwargs):
     :return:
     """
     assert boxes.shape[1] == 7
+    _require_iou3d_cuda()
     order = scores.sort(0, descending=True)[1]
     if pre_maxsize is not None:
         order = order[:pre_maxsize]
@@ -98,6 +111,7 @@ def nms_normal_gpu(boxes, scores, thresh, **kwargs):
     :return:
     """
     assert boxes.shape[1] == 7
+    _require_iou3d_cuda()
     order = scores.sort(0, descending=True)[1]
 
     boxes = boxes[order].contiguous()

@@ -390,7 +390,11 @@ class CenterHead(nn.Module):
             batch_dim = batch_dim.reshape(batch, H*W, 3)
             batch_hm = batch_hm.reshape(batch, H*W, num_cls)
 
-            ys, xs = torch.meshgrid([torch.arange(0, H), torch.arange(0, W)])
+            ys, xs = torch.meshgrid(
+                torch.arange(0, H, device=batch_hm.device),
+                torch.arange(0, W, device=batch_hm.device),
+                indexing="ij",
+            )
             ys = ys.view(1, H, W).repeat(batch, 1, 1).to(batch_hm)
             xs = xs.view(1, H, W).repeat(batch, 1, 1).to(batch_hm)
 

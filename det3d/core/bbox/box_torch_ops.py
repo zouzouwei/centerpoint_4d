@@ -7,6 +7,8 @@ from torch import stack as tstack
 try:
     from det3d.ops.iou3d_nms import iou3d_nms_cuda, iou3d_nms_utils
 except:
+    iou3d_nms_cuda = None
+    iou3d_nms_utils = None
     print("iou3d cuda not built. You don't need this if you use circle_nms. Otherwise, refer to the advanced installation part to build this cuda extension")
 
 def torch_to_np_dtype(ttype):
@@ -252,6 +254,12 @@ def rotate_nms_pcdet(boxes, scores, thresh, pre_maxsize=None, post_max_size=None
     :param thresh:
     :return:
     """
+    if iou3d_nms_cuda is None:
+        raise RuntimeError(
+            "iou3d_nms_cuda is not built. Build det3d/ops/iou3d_nms or use a "
+            "circular_nms config for inference without the rotated CUDA NMS extension."
+        )
+
     # transform back to pcdet's coordinate
     boxes = boxes[:, [0, 1, 2, 4, 3, 5, -1]]
     boxes[:, -1] = -boxes[:, -1] - np.pi /2

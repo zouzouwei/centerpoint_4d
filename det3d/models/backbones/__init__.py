@@ -1,9 +1,15 @@
-import importlib
-spconv_spec = importlib.util.find_spec("spconv")
-found = spconv_spec is not None
+def _has_spconv():
+    for module_name in ("spconv.pytorch", "spconv"):
+        try:
+            module = __import__(module_name, fromlist=["SparseConv3d"])
+            getattr(module, "SparseConv3d")
+            return True
+        except Exception:
+            continue
+    return False
 
-if found:
+
+if _has_spconv():
     from .scn import SpMiddleResNetFHD
 else:
     print("No spconv, sparse convolution disabled!")
-
