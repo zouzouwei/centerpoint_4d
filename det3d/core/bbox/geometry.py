@@ -290,24 +290,16 @@ def points_in_convex_polygon_jit(points, polygon, clockwise=True):
     num_points_of_polygon = polygon.shape[1]
     num_points = points.shape[0]
     num_polygons = polygon.shape[0]
-    if clockwise:
-        vec1 = (
-            polygon
-            - polygon[
-                :,
-                [num_points_of_polygon - 1] + list(range(num_points_of_polygon - 1)),
-                :,
-            ]
-        )
-    else:
-        vec1 = (
-            polygon[
-                :,
-                [num_points_of_polygon - 1] + list(range(num_points_of_polygon - 1)),
-                :,
-            ]
-            - polygon
-        )
+    vec1 = np.empty_like(polygon)
+    for j in range(num_polygons):
+        for k in range(num_points_of_polygon):
+            prev = num_points_of_polygon - 1 if k == 0 else k - 1
+            if clockwise:
+                vec1[j, k, 0] = polygon[j, k, 0] - polygon[j, prev, 0]
+                vec1[j, k, 1] = polygon[j, k, 1] - polygon[j, prev, 1]
+            else:
+                vec1[j, k, 0] = polygon[j, prev, 0] - polygon[j, k, 0]
+                vec1[j, k, 1] = polygon[j, prev, 1] - polygon[j, k, 1]
     # vec1: [num_polygon, num_points_of_polygon, 2]
     ret = np.zeros((num_points, num_polygons), dtype=np.bool_)
     success = True
