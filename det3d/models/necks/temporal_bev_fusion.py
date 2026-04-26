@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from ..registry import NECKS
 
@@ -19,6 +20,8 @@ class TemporalBEVFusion(nn.Module):
         mode="concat",
         detach_history=False,
         use_gate=True,
+        align_history=False,
+        pc_range=None,
     ):
         super().__init__()
         assert num_history > 0
@@ -26,6 +29,8 @@ class TemporalBEVFusion(nn.Module):
         self.num_history = num_history
         self.detach_history = detach_history
         self.use_gate = use_gate
+        self.align_history = align_history
+        self.pc_range = pc_range
 
         self.fuse = nn.Sequential(
             nn.Conv2d(in_channels * (num_history + 1), in_channels, kernel_size=1, bias=False),
@@ -44,7 +49,62 @@ class TemporalBEVFusion(nn.Module):
         else:
             self.gate = None
 
-    def forward(self, current_bev, history_bev):
+    def _warp_history_bev(self, history_bev, current_from_history):
+        if self.pc_range is None:
+            raise ValueError("pc_range must be configured when align_history=True")
+
+        batch, num_history, channels, height, width = history_bev.shape
+        grid_dtype = torch.float32
+        transforms = current_from_history.to(
+            device=history_bev.device, dtype=grid_dtype
+        ).reshape(batch * num_history, 4, 4)
+        history_from_current = torch.linalg.inv(transforms)
+
+        x_min, y_min = self.pc_range[0], self.pc_range[1]
+        x_max, y_max = self.pc_range[3], self.pc_range[4]
+        xs = torch.linspace(
+            x_min + (x_max - x_min) / (2 * width),
+            x_max - (x_max - x_min) / (2 * width),
+            width,
+            device=history_bev.device,
+            dtype=grid_dtype,
+        )
+        ys = torch.linspace(
+            y_min + (y_max - y_min) / (2 * height),
+            y_max - (y_max - y_min) / (2 * height),
+            height,
+            device=history_bev.device,
+            dtype=grid_dtype,
+        )
+        yy, xx = torch.meshgrid(ys, xs, indexing="ij")
+        zeros = torch.zeros_like(xx)
+        ones = torch.ones_like(xx)
+        current_grid = torch.stack([xx, yy, zeros, ones], dim=-1).reshape(-1, 4)
+
+        history_grid = torch.matmul(
+            history_from_current,
+            current_grid.t().unsqueeze(0).expand(batch * num_history, -1, -1),
+        ).transpose(1, 2)
+        hist_x = history_grid[..., 0].reshape(batch * num_history, height, width)
+        hist_y = history_grid[..., 1].reshape(batch * num_history, height, width)
+
+        grid_x = 2.0 * (hist_x - x_min) / (x_max - x_min) - 1.0
+        grid_y = 2.0 * (hist_y - y_min) / (y_max - y_min) - 1.0
+        sample_grid = torch.stack([grid_x, grid_y], dim=-1)
+
+        history_flat = history_bev.reshape(batch * num_history, channels, height, width)
+        warped = F.grid_sample(
+            history_flat.to(dtype=grid_dtype),
+            sample_grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        return warped.reshape(batch, num_history, channels, height, width).to(
+            dtype=history_bev.dtype
+        )
+
+    def forward(self, current_bev, history_bev, history_transforms=None):
         if history_bev is None:
             return current_bev
 
@@ -65,6 +125,11 @@ class TemporalBEVFusion(nn.Module):
 
         if self.detach_history:
             history_bev = history_bev.detach()
+
+        if self.align_history:
+            if history_transforms is None:
+                raise ValueError("history_transforms is required when align_history=True")
+            history_bev = self._warp_history_bev(history_bev, history_transforms)
 
         history_flat = history_bev.reshape(batch, num_history * channels, height, width)
         fused = self.fuse(torch.cat([current_bev, history_flat], dim=1))

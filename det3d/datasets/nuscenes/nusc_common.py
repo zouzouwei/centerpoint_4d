@@ -351,6 +351,81 @@ def find_closet_camera_tokens(nusc, pointsensor, ref_sample):
     return min_cams     
 
 
+def _build_temporal_history_frames(
+    nusc,
+    sample,
+    ref_lidar_path,
+    ref_sd_token,
+    ref_from_car,
+    car_from_global,
+    ref_time,
+    num_history=2,
+):
+    from nuscenes.utils.geometry_utils import transform_matrix
+
+    history_frames = []
+    fallback_frame = {
+        "lidar_path": ref_lidar_path,
+        "sample_token": sample["token"],
+        "sample_data_token": ref_sd_token,
+        "transform_matrix": None,
+        "time_lag": 0.0,
+        "timestamp": ref_time,
+        "scene_token": sample["scene_token"],
+    }
+
+    prev_sample_token = sample["prev"]
+    while len(history_frames) < num_history:
+        if prev_sample_token == "":
+            history_frames.append(dict(history_frames[-1] if history_frames else fallback_frame))
+            continue
+
+        prev_sample = nusc.get("sample", prev_sample_token)
+        prev_sd_token = prev_sample["data"]["LIDAR_TOP"]
+        prev_sd_rec = nusc.get("sample_data", prev_sd_token)
+        lidar_path = nusc.get_sample_data_path(prev_sd_rec["token"])
+        if not Path(lidar_path).exists():
+            history_frames.append(dict(history_frames[-1] if history_frames else fallback_frame))
+            prev_sample_token = prev_sample["prev"]
+            continue
+
+        prev_pose_rec = nusc.get("ego_pose", prev_sd_rec["ego_pose_token"])
+        global_from_car = transform_matrix(
+            prev_pose_rec["translation"],
+            Quaternion(prev_pose_rec["rotation"]),
+            inverse=False,
+        )
+
+        prev_cs_rec = nusc.get(
+            "calibrated_sensor", prev_sd_rec["calibrated_sensor_token"]
+        )
+        car_from_current = transform_matrix(
+            prev_cs_rec["translation"],
+            Quaternion(prev_cs_rec["rotation"]),
+            inverse=False,
+        )
+
+        transform = reduce(
+            np.dot,
+            [ref_from_car, car_from_global, global_from_car, car_from_current],
+        )
+
+        history_frames.append(
+            {
+                "lidar_path": lidar_path,
+                "sample_token": prev_sample["token"],
+                "sample_data_token": prev_sd_token,
+                "transform_matrix": transform,
+                "time_lag": ref_time - 1e-6 * prev_sd_rec["timestamp"],
+                "timestamp": 1e-6 * prev_sd_rec["timestamp"],
+                "scene_token": prev_sample["scene_token"],
+            }
+        )
+        prev_sample_token = prev_sample["prev"]
+
+    return history_frames
+
+
 def _fill_trainval_infos(nusc, train_scenes, val_scenes, test=False, nsweeps=10, filter_zero=True):
     from nuscenes.utils.geometry_utils import transform_matrix
 
@@ -412,10 +487,22 @@ def _fill_trainval_infos(nusc, train_scenes, val_scenes, test=False, nsweeps=10,
             "ref_from_car": ref_from_car,
             "car_from_global": car_from_global,
             "timestamp": ref_time,
+            "scene_token": sample["scene_token"],
             "all_cams_from_lidar": all_cams_from_lidar,
             "all_cams_intrinsic": all_cams_intrinsic,
             "all_cams_path": all_cams_path
         }
+
+        info["history_frames"] = _build_temporal_history_frames(
+            nusc,
+            sample,
+            ref_lidar_path,
+            ref_sd_token,
+            ref_from_car,
+            car_from_global,
+            ref_time,
+            num_history=2,
+        )
 
         sample_data_token = sample["data"][chan]
         curr_sd_rec = nusc.get("sample_data", sample_data_token)

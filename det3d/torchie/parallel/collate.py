@@ -166,6 +166,8 @@ def collate_kitti(batch_list, samples_per_gpu=1):
             ret[key] = res
         elif key == 'gt_boxes_and_cls':
             ret[key] = torch.tensor(np.stack(elems, axis=0))
+        elif key == "history_frame_transforms":
+            ret[key] = torch.tensor(np.stack(elems, axis=0))
         else:
             ret[key] = np.stack(elems, axis=0)
 

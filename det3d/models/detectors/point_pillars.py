@@ -70,7 +70,9 @@ class PointPillars(SingleStageDetector):
             )
         history_num = int(total_history // batch_size)
         history = self._extract_history_feat(example, history_num)
-        return self.temporal_fusion(x, history)
+        return self.temporal_fusion(
+            x, history, history_transforms=example.get("history_frame_transforms")
+        )
 
     def forward(self, example, return_loss=True, **kwargs):
         voxels = example["voxels"]

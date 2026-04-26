@@ -48,6 +48,7 @@ def example_to_device(example, device, non_blocking=False) -> dict:
             "history_coordinates",
             "history_num_points",
             "history_num_voxels",
+            "history_frame_transforms",
             "cyv_voxels",
             "cyv_num_voxels",
             "cyv_coordinates",

@@ -54,19 +54,23 @@ def remove_close(points, radius: float) -> None:
     return points
 
 
-def read_sweep(sweep, virtual=False):
+def read_temporal_frame(frame, virtual=False):
     min_distance = 1.0
-    points_sweep = read_file(str(sweep["lidar_path"]), virtual=virtual).T
+    points_sweep = read_file(str(frame["lidar_path"]), virtual=virtual).T
     points_sweep = remove_close(points_sweep, min_distance)
 
     nbr_points = points_sweep.shape[1]
-    if sweep["transform_matrix"] is not None:
-        points_sweep[:3, :] = sweep["transform_matrix"].dot(
+    if frame["transform_matrix"] is not None:
+        points_sweep[:3, :] = frame["transform_matrix"].dot(
             np.vstack((points_sweep[:3, :], np.ones(nbr_points)))
         )[:3, :]
-    curr_times = sweep["time_lag"] * np.ones((1, points_sweep.shape[1]))
+    curr_times = frame["time_lag"] * np.ones((1, points_sweep.shape[1]))
 
     return points_sweep.T, curr_times.T
+
+
+def read_sweep(sweep, virtual=False):
+    return read_temporal_frame(sweep, virtual=virtual)
 
 def read_single_waymo(obj):
     points_xyz = obj["lidars"]["points_xyz"]
@@ -122,6 +126,8 @@ class LoadPointCloudFromFile(object):
 
             nsweeps = res["lidar"]["nsweeps"]
             temporal_history_num = res["lidar"].get("temporal_history_num", 0)
+            temporal_history_source = res["lidar"].get("temporal_history_source", "sweep")
+            temporal_history_align = res["lidar"].get("temporal_history_align", "point")
 
             lidar_path = Path(info["lidar_path"])
             points = read_file(str(lidar_path), virtual=res["virtual"])
@@ -135,7 +141,7 @@ class LoadPointCloudFromFile(object):
                 nsweeps, len(info["sweeps"])
             )
 
-            if temporal_history_num > 0:
+            if temporal_history_num > 0 and temporal_history_source == "sweep":
                 if len(info["sweeps"]) < temporal_history_num:
                     raise ValueError(
                         "temporal_history_num requires at least that many stored sweeps. "
@@ -150,6 +156,48 @@ class LoadPointCloudFromFile(object):
                         np.hstack([points_sweep, times_sweep.astype(points_sweep.dtype)])
                     )
                 res["lidar"]["history_points"] = history_points
+            elif temporal_history_num > 0 and temporal_history_source == "keyframe":
+                if "history_frames" not in info:
+                    raise ValueError(
+                        "temporal_history_source='keyframe' requires infos with "
+                        "history_frames. Regenerate nuScenes infos with the updated "
+                        "create_data.py."
+                    )
+                if len(info["history_frames"]) < temporal_history_num:
+                    raise ValueError(
+                        "Not enough keyframe history in info['history_frames']. "
+                        f"Got {len(info['history_frames'])}, need {temporal_history_num}."
+                    )
+                history_points = []
+                history_transforms = []
+                for i in range(temporal_history_num):
+                    frame = info["history_frames"][i]
+                    frame_for_read = dict(frame)
+                    if temporal_history_align == "bev":
+                        frame_for_read["transform_matrix"] = None
+                    elif temporal_history_align != "point":
+                        raise ValueError(
+                            "Unsupported temporal_history_align: "
+                            f"{temporal_history_align}. Expected 'point' or 'bev'."
+                        )
+                    points_frame, times_frame = read_temporal_frame(frame_for_read, virtual=res["virtual"])
+                    history_points.append(
+                        np.hstack([points_frame, times_frame.astype(points_frame.dtype)])
+                    )
+                    transform = frame["transform_matrix"]
+                    if transform is None:
+                        transform = np.eye(4, dtype=np.float32)
+                    history_transforms.append(transform.astype(np.float32))
+                res["lidar"]["history_points"] = history_points
+                if temporal_history_align == "bev":
+                    res["lidar"]["history_frame_transforms"] = np.stack(
+                        history_transforms, axis=0
+                    )
+            elif temporal_history_num > 0:
+                raise ValueError(
+                    "Unsupported temporal_history_source: "
+                    f"{temporal_history_source}. Expected 'sweep' or 'keyframe'."
+                )
             else:
                 for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
                     sweep = info["sweeps"][i]
