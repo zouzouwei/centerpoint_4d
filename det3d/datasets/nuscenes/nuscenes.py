@@ -44,6 +44,7 @@ class NuScenesDataset(PointCloudDataset):
         **kwargs,
     ):
         self.load_interval = load_interval 
+        self.temporal_history_num = kwargs.get("temporal_history_num", 0)
         super(NuScenesDataset, self).__init__(
             root_path, info_path, pipeline, test_mode=test_mode, class_names=class_names
         )
@@ -170,6 +171,7 @@ class NuScenesDataset(PointCloudDataset):
                 "nsweeps": self.nsweeps,
                 # "ground_plane": -gp[-1] if with_gp else None,
                 "annotations": None,
+                "temporal_history_num": self.temporal_history_num,
             },
             "metadata": {
                 "image_prefix": self._root_path,

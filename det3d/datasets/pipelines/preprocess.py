@@ -24,6 +24,27 @@ def drop_arrays_by_name(gt_names, used_classes):
     inds = np.array(inds, dtype=np.int64)
     return inds
 
+
+def _merge_temporal_points(points, history_points):
+    if not history_points:
+        return points, None
+    sizes = [points.shape[0]] + [history.shape[0] for history in history_points]
+    return np.concatenate([points] + history_points, axis=0), sizes
+
+
+def _split_temporal_points(points, sizes):
+    if sizes is None:
+        return points, None
+    end = sizes[0]
+    current_points = points[:end]
+    history_points = []
+    start = end
+    for size in sizes[1:]:
+        end = start + size
+        history_points.append(points[start:end])
+        start = end
+    return current_points, history_points
+
 @PIPELINES.register_module
 class Preprocess(object):
     def __init__(self, cfg=None, **kwargs):
@@ -123,6 +144,10 @@ class Preprocess(object):
             )
             gt_dict["gt_classes"] = gt_classes
 
+            points, temporal_sizes = _merge_temporal_points(
+                points, res["lidar"].get("history_points")
+            )
+
             gt_dict["gt_boxes"], points = prep.random_flip_both(gt_dict["gt_boxes"], points)
             
             gt_dict["gt_boxes"], points = prep.global_rotation(
@@ -134,6 +159,9 @@ class Preprocess(object):
             gt_dict["gt_boxes"], points = prep.global_translate_(
                 gt_dict["gt_boxes"], points, noise_translate_std=self.global_translate_std
             )
+            points, history_points = _split_temporal_points(points, temporal_sizes)
+            if history_points is not None:
+                res["lidar"]["history_points"] = history_points
         elif self.no_augmentation:
             gt_boxes_mask = np.array(
                 [n in self.class_names for n in gt_dict["gt_names"]], dtype=np.bool_
@@ -149,6 +177,8 @@ class Preprocess(object):
 
         if self.shuffle_points:
             np.random.shuffle(points)
+            for history in res["lidar"].get("history_points", []):
+                np.random.shuffle(history)
 
         res["lidar"]["points"] = points
 
@@ -206,6 +236,33 @@ class Voxelization(object):
             range=pc_range,
             size=voxel_size
         )
+
+        if "history_points" in res["lidar"]:
+            history_voxels = []
+            history_coordinates = []
+            history_num_points = []
+            history_num_voxels = []
+            for history_idx, history_points in enumerate(res["lidar"]["history_points"]):
+                h_voxels, h_coordinates, h_num_points = self.voxel_generator.generate(
+                    history_points, max_voxels=max_voxels
+                )
+                h_coordinates = np.pad(
+                    h_coordinates,
+                    ((0, 0), (1, 0)),
+                    mode="constant",
+                    constant_values=history_idx,
+                )
+                history_voxels.append(h_voxels)
+                history_coordinates.append(h_coordinates)
+                history_num_points.append(h_num_points)
+                history_num_voxels.append(h_voxels.shape[0])
+
+            res["lidar"]["history_voxels"] = dict(
+                voxels=np.concatenate(history_voxels, axis=0),
+                coordinates=np.concatenate(history_coordinates, axis=0),
+                num_points=np.concatenate(history_num_points, axis=0),
+                num_voxels=np.array(history_num_voxels, dtype=np.int64),
+            )
 
         double_flip = self.double_flip and (res["mode"] != 'train')
 
@@ -456,4 +513,3 @@ class AssignLabel(object):
         res["lidar"]["targets"] = example
 
         return res, info
-

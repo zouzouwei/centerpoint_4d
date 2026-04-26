@@ -37,6 +37,15 @@ class Reformat(object):
                 coordinates=voxels["coordinates"],
             )
 
+        if "history_voxels" in res["lidar"]:
+            history_voxels = res["lidar"]["history_voxels"]
+            data_bundle.update(
+                history_voxels=history_voxels["voxels"],
+                history_num_points=history_voxels["num_points"],
+                history_num_voxels=history_voxels["num_voxels"],
+                history_coordinates=history_voxels["coordinates"],
+            )
+
         if res["mode"] == "train":
             data_bundle.update(res["lidar"]["targets"])
         elif res["mode"] == "val":
@@ -85,6 +94,5 @@ class Reformat(object):
 
 
         return data_bundle, info
-
 
 

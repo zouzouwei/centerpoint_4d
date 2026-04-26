@@ -22,6 +22,10 @@ def example_to_device(
             "num_points",
             "points",
             "num_voxels",
+            "history_voxels",
+            "history_coordinates",
+            "history_num_points",
+            "history_num_voxels",
         ]:
             # slow when directly provide fp32 data with dtype=torch.half
             example_torch[k] = v.cuda(device, non_blocking=non_blocking)

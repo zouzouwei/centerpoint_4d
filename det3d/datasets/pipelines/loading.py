@@ -121,6 +121,7 @@ class LoadPointCloudFromFile(object):
         if self.type == "NuScenesDataset":
 
             nsweeps = res["lidar"]["nsweeps"]
+            temporal_history_num = res["lidar"].get("temporal_history_num", 0)
 
             lidar_path = Path(info["lidar_path"])
             points = read_file(str(lidar_path), virtual=res["virtual"])
@@ -134,11 +135,27 @@ class LoadPointCloudFromFile(object):
                 nsweeps, len(info["sweeps"])
             )
 
-            for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
-                sweep = info["sweeps"][i]
-                points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
-                sweep_points_list.append(points_sweep)
-                sweep_times_list.append(times_sweep)
+            if temporal_history_num > 0:
+                if len(info["sweeps"]) < temporal_history_num:
+                    raise ValueError(
+                        "temporal_history_num requires at least that many stored sweeps. "
+                        f"Got {len(info['sweeps'])}, need {temporal_history_num}. "
+                        "Regenerate infos with nsweeps >= temporal_history_num + 1."
+                    )
+                history_points = []
+                for i in range(temporal_history_num):
+                    sweep = info["sweeps"][i]
+                    points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
+                    history_points.append(
+                        np.hstack([points_sweep, times_sweep.astype(points_sweep.dtype)])
+                    )
+                res["lidar"]["history_points"] = history_points
+            else:
+                for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
+                    sweep = info["sweeps"][i]
+                    points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
+                    sweep_points_list.append(points_sweep)
+                    sweep_times_list.append(times_sweep)
 
             points = np.concatenate(sweep_points_list, axis=0)
             times = np.concatenate(sweep_times_list, axis=0).astype(points.dtype)

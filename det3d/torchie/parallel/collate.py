@@ -104,7 +104,8 @@ def collate_kitti(batch_list, samples_per_gpu=1):
     # example_merged.pop("num_voxels")
     for key, elems in example_merged.items():
         if key in ["voxels", "num_points", "num_gt", "voxel_labels", "num_voxels",
-                   "cyv_voxels", "cyv_num_points", "cyv_num_voxels"]:
+                   "cyv_voxels", "cyv_num_points", "cyv_num_voxels",
+                   "history_voxels", "history_num_points", "history_num_voxels"]:
             ret[key] = torch.tensor(np.concatenate(elems, axis=0))
         elif key in [
             "gt_boxes",
@@ -143,6 +144,14 @@ def collate_kitti(batch_list, samples_per_gpu=1):
                     coor, ((0, 0), (1, 0)), mode="constant", constant_values=i
                 )
                 coors.append(coor_pad)
+            ret[key] = torch.tensor(np.concatenate(coors, axis=0))
+        elif key == "history_coordinates":
+            coors = []
+            num_history = len(example_merged["history_num_voxels"][0])
+            for i, coor in enumerate(elems):
+                coor = coor.copy()
+                coor[:, 0] += i * num_history
+                coors.append(coor)
             ret[key] = torch.tensor(np.concatenate(coors, axis=0))
         elif key in ["anchors", "anchors_mask", "reg_targets", "reg_weights", "labels", "hm", "anno_box",
                     "ind", "mask", "cat"]:
