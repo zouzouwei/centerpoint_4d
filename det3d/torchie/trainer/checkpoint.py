@@ -163,6 +163,13 @@ def get_torchvision_models():
     return model_urls
 
 
+def load_checkpoint_file(filename, map_location):
+    try:
+        return torch.load(filename, map_location=map_location, weights_only=False)
+    except TypeError:
+        return torch.load(filename, map_location=map_location)
+
+
 def load_checkpoint(model, filename, map_location='cpu', strict=False, logger=None):
     """Load checkpoint from a file or URI.
 
@@ -198,7 +205,7 @@ def load_checkpoint(model, filename, map_location='cpu', strict=False, logger=No
     else:
         if not osp.isfile(filename):
             raise IOError("{} is not a checkpoint file".format(filename))
-        checkpoint = torch.load(filename, map_location=map_location)
+        checkpoint = load_checkpoint_file(filename, map_location)
     # get state_dict from checkpoint
     if isinstance(checkpoint, OrderedDict):
         state_dict = checkpoint

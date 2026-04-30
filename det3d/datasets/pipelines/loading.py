@@ -141,6 +141,13 @@ class LoadPointCloudFromFile(object):
                 nsweeps, len(info["sweeps"])
             )
 
+            if nsweeps > 1:
+                for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
+                    sweep = info["sweeps"][i]
+                    points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
+                    sweep_points_list.append(points_sweep)
+                    sweep_times_list.append(times_sweep)
+
             if temporal_history_num > 0 and temporal_history_source == "sweep":
                 if len(info["sweeps"]) < temporal_history_num:
                     raise ValueError(
@@ -198,12 +205,6 @@ class LoadPointCloudFromFile(object):
                     "Unsupported temporal_history_source: "
                     f"{temporal_history_source}. Expected 'sweep' or 'keyframe'."
                 )
-            else:
-                for i in np.random.choice(len(info["sweeps"]), nsweeps - 1, replace=False):
-                    sweep = info["sweeps"][i]
-                    points_sweep, times_sweep = read_sweep(sweep, virtual=res["virtual"])
-                    sweep_points_list.append(points_sweep)
-                    sweep_times_list.append(times_sweep)
 
             points = np.concatenate(sweep_points_list, axis=0)
             times = np.concatenate(sweep_times_list, axis=0).astype(points.dtype)

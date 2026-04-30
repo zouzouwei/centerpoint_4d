@@ -11,6 +11,8 @@ warnings.simplefilter('ignore', category=NumbaWarning)
 import numpy as np
 import torch
 import yaml
+import sys
+sys.path.append(".")
 from det3d.datasets import build_dataset
 from det3d.models import build_detector
 from det3d.torchie import Config

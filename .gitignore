@@ -16,4 +16,5 @@ venv/
 .vscode/
 .codex
 data/
-spconv/
+spconv/ 
+work_dirs/

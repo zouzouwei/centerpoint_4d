@@ -6,10 +6,10 @@ from nusc_centerpoint_voxelnet_0075voxel_fix_bn_z_flip import *  # noqa: F401,F4
 # current keyframe and the two previous keyframes separately, warp historical
 # BEV features by ego motion, then fuse immediately before CenterHead.
 temporal_history_num = 2
-nsweeps = 1
+nsweeps = 10
 data_root = "data/nuscenes"
-train_anno = "data/nuscenes/infos_train_01sweeps_withvelo_filter_True.pkl"
-val_anno = "data/nuscenes/infos_val_01sweeps_withvelo_filter_True.pkl"
+train_anno = "data/nuscenes/infos_train_10sweeps_withvelo_filter_True_30scenes.pkl"
+val_anno = "data/nuscenes/infos_val_10sweeps_withvelo_filter_True_5scenes.pkl"
 
 model["temporal_fusion"] = dict(
     type="TemporalBEVFusion",
@@ -35,10 +35,9 @@ test_pipeline = [
     dict(type="Reformat", double_flip=False),
 ]
 
-# GT database sampling is disabled for this temporal config. The previous base
-# path points to 10-sweep DB infos, while this experiment intentionally uses
-# one LiDAR frame per keyframe.
-db_sampler["db_info_path"] = "data/nuscenes/dbinfos_train_1sweeps_withvelo.pkl"
+# GT database sampling stays disabled for this temporal config so the temporal
+# history branches do not receive object samples that only exist in the current frame.
+db_sampler["db_info_path"] = "data/nuscenes/dbinfos_train_10sweeps_withvelo.pkl"
 db_sampler["enable"] = False
 train_preprocessor["db_sampler"] = None
 
@@ -75,4 +74,4 @@ data["test"]["pipeline"] = test_pipeline
 data["test"].pop("version", None)
 
 device_ids = range(1)
-work_dir = "./work_dirs/nusc_voxelnet_0075_keyframe_temporal_bev"
+work_dir = "./work_dirs/nusc_voxelnet_0075_keyframe_temporal_bev_30train_5val"
